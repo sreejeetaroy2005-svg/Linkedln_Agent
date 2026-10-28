@@ -16,11 +16,13 @@ class LLMError(RuntimeError):
 
 def _persona(headline: str, snippet: str) -> tuple[str, bool]:
     text = f"{headline} {snippet}".lower()
-    switch = ("transition" in text or "switch" in text or "moving to" in text or "career change" in text)
-    student = any(word in text for word in ("student", "graduate", "fresher", "final year", "new grad"))
-    career = any(word in text for word in ("engineer", "developer", "analyst", "professional"))
+    switch = any(word in text for word in ("transition", "switch", "moving to", "career change", "pivot"))
     if switch:
         return "Career_Switcher", False
+    if "learning generative ai" in text and any(w in text for w in ("java", "qa", "support", "analyst")):
+        return "Career_Switcher", True
+    student = any(word in text for word in ("student", "graduate", "fresher", "final year", "new grad"))
+    career = any(word in text for word in ("engineer", "developer", "analyst", "professional"))
     if student:
         return "Fresher", False
     if career:

@@ -68,32 +68,52 @@ with m3: metric("Freshers", str(metrics.get("profiles_by_persona",{}).get("Fresh
 with m4: metric("Confirmed sends today", str(metrics.get("confirmed_sends",0)), f"{metrics.get('handoffs',0)} handoffs do not count")
 with m5: metric("Daily allowance left", str(metrics.get("remaining",15)), f"of {metrics.get('limit',15)} confirmed sends")
 
+has_serper_key = bool(settings.serper_api_key and settings.serper_api_key.strip() and settings.serper_api_key != "your_serper_api_key_here")
+
 st.markdown("### Discovery")
 with st.container(border=True):
-    left,right=st.columns([1.15,1])
+    left, right = st.columns([1.15, 1])
     with left:
-        selected=st.multiselect("Learner buckets",["A · Students & freshers","B · Early career · 1–2 YOE","C · Career switchers"],default=["A · Students & freshers","B · Early career · 1–2 YOE","C · Career switchers"],key="bucket_select")
-        bucket_codes=[x[0] for x in selected]
-        keyword=st.text_input("Optional keyword",placeholder="e.g. machine learning, Python, LLM")
-        location=st.text_input("Optional location",placeholder="e.g. Toronto, Canada")
+        selected = st.multiselect(
+            "Learner buckets",
+            ["A · Students & freshers", "B · Early career · 1–2 YOE", "C · Career switchers"],
+            default=["A · Students & freshers", "B · Early career · 1–2 YOE", "C · Career switchers"],
+            key="bucket_select",
+        )
+        bucket_codes = [x[0] for x in selected]
+        keyword = st.text_input("Optional keyword", placeholder="e.g. machine learning, Python, LLM")
+        location = st.text_input("Optional location", placeholder="e.g. Toronto, Canada")
     with right:
-        offline=st.toggle("Offline demo mode",value=settings.offline_mode_default,key="offline_toggle",help="Uses synthetic profiles and deterministic demo scoring. Makes no external search or LLM calls.")
-        st.caption("Live mode uses the configured public search provider and LLM; it never visits LinkedIn profile pages.")
-        if st.button("Build search queries",use_container_width=True):
+        provider_options = ["Mock / Offline", "Serper"]
+        cur_idx = 1 if (has_serper_key and settings.search_provider == "serper") else 0
+        selected_provider = st.selectbox(
+            "Search provider",
+            provider_options,
+            index=cur_idx,
+            help="Mock / Offline uses fictional profiles without external calls. Serper requires SERPER_API_KEY.",
+            key="dash_provider_select",
+        )
+        offline = (selected_provider == "Mock / Offline")
+        if not offline and not has_serper_key:
+            st.warning("⚠️ Live search requires SERPER_API_KEY. Switch to Mock / Offline to test without keys.")
+        if st.button("Build search queries", use_container_width=True):
             try:
-                queries=build_queries(QueryRequest(buckets=bucket_codes or ["A"],keyword=keyword,location=location))
-                st.session_state.generated_queries=queries.queries
-            except Exception as exc: st.error(str(exc))
-        if st.button("Run discovery",type="primary",use_container_width=True,disabled=not api_online):
+                queries = build_queries(QueryRequest(buckets=bucket_codes or ["A"], keyword=keyword, location=location))
+                st.session_state.generated_queries = queries.queries
+            except Exception as exc:
+                st.error(str(exc))
+        run_disabled = (not api_online) or (not offline and not has_serper_key)
+        if st.button("Run discovery", type="primary", use_container_width=True, disabled=run_disabled):
             try:
                 with st.spinner("Searching public results and preparing profiles…"):
-                    response=api_post("/api/discover",DiscoveryRequest(buckets=bucket_codes or ["A"],keyword=keyword,location=location,offline=offline).model_dump())
-                st.session_state.profiles=response["profiles"]
-                st.session_state.last_errors=response["errors"]
-                st.session_state.generated_queries=response["queries"]
-                st.session_state.offline_results=offline
+                    response = api_post("/api/discover", DiscoveryRequest(buckets=bucket_codes or ["A"], keyword=keyword, location=location, offline=offline).model_dump())
+                st.session_state.profiles = response["profiles"]
+                st.session_state.last_errors = response["errors"]
+                st.session_state.generated_queries = response["queries"]
+                st.session_state.offline_results = offline
                 st.success(f"Added {response['discovered_count']} new profiles · {response['duplicate_count']} already in history.")
-            except Exception as exc: st.error(f"Discovery failed: {exc}")
+            except Exception as exc:
+                st.error(f"Discovery failed: {exc}")
     for query in st.session_state.get("generated_queries",[]): st.code(query,language="text")
     if st.session_state.get("offline_results"):
         st.markdown('<div class="demo">DEMO DATA — these learner profiles are fictional; offline scoring is deterministic and not an AI model result.</div>',unsafe_allow_html=True)

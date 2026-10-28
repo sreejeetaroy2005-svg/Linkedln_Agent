@@ -58,6 +58,19 @@ class OutreachPayload(BaseModel):
     is_demo: bool = False
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
+    @field_validator("detected_persona", mode="before")
+    @classmethod
+    def normalize_persona(cls, value: str) -> str:
+        if isinstance(value, str):
+            clean = value.strip()
+            if clean in {"Freshers", "students", "Students", "fresher", "freshers"}:
+                return "Fresher"
+            if clean in {"1-2 YOE", "1-2YOE", "1-2_yoe", "early_career", "Early Career"}:
+                return "1-2_YOE"
+            if clean in {"Career Switcher", "career_switcher", "CareerSwitcher", "career_switchers", "Career Switchers"}:
+                return "Career_Switcher"
+        return value
+
     @field_validator("profile_url")
     @classmethod
     def valid_url(cls, value: str) -> str:
